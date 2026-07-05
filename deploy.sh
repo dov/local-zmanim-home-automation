@@ -5,13 +5,17 @@ set -e
 
 SCRIPT_DIR="$HOME/scripts"
 MASTER_SCRIPT="shabbat-prepare.py"
-# Explicitly uses 'uv run' inside your scripts directory to execute with the local .venv
-CRON_JOB="0 5 * * * cd $SCRIPT_DIR && uv run python3 $MASTER_SCRIPT >> $SCRIPT_DIR/shabbat.log 2>&1"
+
+# Discover the full path of 'uv'
+UV_PATH=$(command -v uv)
+
+# Explicitly uses the discovered 'uv' path inside your scripts directory to execute with the local .venv
+CRON_JOB="0 5 * * * cd $SCRIPT_DIR && $UV_PATH run python3 $MASTER_SCRIPT >> $SCRIPT_DIR/shabbat.log 2>&1"
 
 echo "=== Starting Shabbat Automation Deployment (uv edition) ==="
 
 # 1. Verify uv is installed on the system before proceeding
-if ! command -v uv &> /dev/null; then
+if [ -z "$UV_PATH" ]; then
     echo "ERROR: 'uv' command-line tool could not be found."
     echo "Please install it first via: curl -LsSf https://astral.sh | sh"
     exit 1
@@ -41,12 +45,12 @@ cd "$SCRIPT_DIR"
 
 # Create a fresh local virtual environment (.venv) if it doesn't exist
 if [ ! -d ".venv" ]; then
-    uv venv
+    $UV_PATH venv
 fi
 
 # Pin dependencies explicitly into the local virtual environment
 echo "Installing project dependencies locally..."
-uv pip install python-crontab zmanim
+$UV_PATH pip install python-crontab zmanim
 
 # 6. Idempotent Crontab Injection
 echo "Configuring system cron rules..."
@@ -55,7 +59,7 @@ cd "$HOME"
 crontab -l > current_cron.bak 2>/dev/null || touch current_cron.bak
 
 # Check if the specific uv execution master rule is already registered
-if grep -Fq "uv run python3 $MASTER_SCRIPT" current_cron.bak; then
+if grep -Fq "$UV_PATH run python3 $MASTER_SCRIPT" current_cron.bak; then
     echo "Cron entry already exists. Skipping crontab modification."
 else
     echo "Appending master schedule trigger to user crontab..."
@@ -69,4 +73,4 @@ rm current_cron.bak
 
 echo "=== Deployment Completed Successfully ==="
 echo "The project is isolated inside: $SCRIPT_DIR/.venv/"
-echo "The system will check for Shabbat and Yom Tov entry profiles daily at 05:00 AM using 'uv run'."
+echo "The system will check for Shabbat and Yom Tov entry profiles daily at 05:00 AM using '$UV_PATH run'."
