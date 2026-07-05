@@ -9,17 +9,17 @@ MASTER_SCRIPT="shabbat-prepare.py"
 # Discover the full path of 'uv'
 UV_PATH=$(command -v uv)
 
-# Explicitly uses the discovered 'uv' path inside your scripts directory to execute with the local .venv
-CRON_JOB="0 5 * * * cd $SCRIPT_DIR && $UV_PATH run python3 $MASTER_SCRIPT >> $SCRIPT_DIR/shabbat.log 2>&1"
-
-echo "=== Starting Shabbat Automation Deployment (uv edition) ==="
-
-# 1. Verify uv is installed on the system before proceeding
+# Check if UV_PATH is empty and exit with an error message if it is
 if [ -z "$UV_PATH" ]; then
     echo "ERROR: 'uv' command-line tool could not be found."
     echo "Please install it first via: curl -LsSf https://astral.sh | sh"
     exit 1
 fi
+
+# Explicitly uses the discovered 'uv' path inside your scripts directory to execute with the local .venv
+CRON_JOB="0 5 * * * cd $SCRIPT_DIR && $UV_PATH run python3 $MASTER_SCRIPT >> $SCRIPT_DIR/shabbat.log 2>&1"
+
+echo "=== Starting Shabbat Automation Deployment (uv edition) ==="
 
 # 2. Ensure the target directory layout exists
 if [ ! -d "$SCRIPT_DIR" ]; then
