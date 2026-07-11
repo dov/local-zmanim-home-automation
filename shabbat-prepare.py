@@ -22,6 +22,7 @@ LOG_FILE = os.path.expanduser("~/log/shabbat-prepare.log")
 
 SCRIPT_MAPPING = [
     {"name": "shabbat-pre-1h.py",  "anchor": "start", "offset_hours": -1},
+    {"name": "shabbat-pre-0.5h.py",  "anchor": "start", "offset_hours": -1},
     {"name": "shabbat-pre-0h.py",  "anchor": "start", "offset_hours": 0},
     {"name": "shabbat-post-0h.py", "anchor": "end",   "offset_hours": 0},
     {"name": "shabbat-post-1h.py", "anchor": "end",   "offset_hours": 1}
