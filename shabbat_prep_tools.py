@@ -187,6 +187,14 @@ async def send_telegram_message(message='', parse_mode='HTML', chat_id=bot_token
     # Always clean up and close network connections safely
     await app.shutdown()
 
+def send_msg(msg):
+  # asyncio.run handles execution of the top-level async coroutine
+  asyncio.run(send_telegram_message(
+    message=msg,
+    parse_mode=ParseMode.HTML,
+    chat_id=me_user_id
+  ))
+  
 def play_mp3(url='http://192.168.1.11/shavua-tov.mp3',
             volume=5):
   logger.info(f'play_mp3({url=},{volume=})')
