@@ -188,7 +188,7 @@ def UpdateAtJobs(start_time, end_time):
     target_time = anchor_time + timedelta(hours=item["offset_hours"])
     
     # Append the comment directly to the command so our inspector finds it
-    cmd = f"/home/dov/scripts/.venvbin/python3 {script_path}"
+    cmd = f"/home/dov/scripts/.venv/bin/python3 {script_path}"
     
     if ScheduleAtJob(cmd, target_time):
       logging.info(f"Successfully scheduled {item['name']} for {target_time.strftime('%Y-%m-%d %H:%M')}")
