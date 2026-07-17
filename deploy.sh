@@ -36,7 +36,7 @@ fi
 
 # 4. Sync script assets to the deployment directory
 echo "Deploying script assets to $SCRIPT_DIR..."
-cp shabbat-*.py "$SCRIPT_DIR/" 2>/dev/null || true
+cp shabbat-*.py shabbat_prep_tools.py "$SCRIPT_DIR/" 2>/dev/null || true
 chmod +x "$SCRIPT_DIR"/*.py
 
 # 5. Initialize isolated environment via uv
