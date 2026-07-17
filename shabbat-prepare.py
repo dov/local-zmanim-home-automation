@@ -1,10 +1,16 @@
 #!/usr/bin/env python3
+######################################################################
+#  Prepars at jobs to be run around shabbat according to the
+#  scripts found.
+######################################################################
+
 import os
 import sys
 import argparse
 import logging
 from datetime import datetime, timedelta, date
 from crontab import CronTab
+import subprocess
 
 # Import Zmanim components
 from zmanim.zmanim_calendar import ZmanimCalendar
@@ -20,29 +26,36 @@ TZ_NAME = "Asia/Jerusalem"
 SCRIPT_DIR = os.path.expanduser("~/scripts")
 LOG_FILE = os.path.expanduser("~/log/shabbat-prepare.log")
 
+# Initialize Geolocation for Rehovot
+location = GeoLocation("Rehovot", LAT, LON, TZ_NAME, elevation=ELEVATION)
+
+
 SCRIPT_MAPPING = [
     {"name": "shabbat-pre-1h.py",  "anchor": "start", "offset_hours": -1},
-    {"name": "shabbat-pre-0.5h.py",  "anchor": "start", "offset_hours": -1},
+    {"name": "shabbat-pre-0.5h.py",  "anchor": "start", "offset_hours": -0.5},
     {"name": "shabbat-pre-0h.py",  "anchor": "start", "offset_hours": 0},
-    {"name": "shabbat-post-0h.py", "anchor": "end",   "offset_hours": 0},
+    {"name": "shabbat-post-0h.py", "anchor": "end",   "offset_hours": 0.5},
     {"name": "shabbat-post-1h.py", "anchor": "end",   "offset_hours": 1}
 ]
 
-# --- LOGGING SETUP ---
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(levelname)s: %(name)s: %(message)s',
-    handlers=[
-        logging.FileHandler(LOG_FILE),
-        logging.StreamHandler(sys.stdout)
-    ]
-)
-logger = logging.getLogger("shabbat-prep")
-logger.info('------------------')
-logger.info(f'Running shabbat-prepare.py on {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}')
-
-# Initialize Geolocation for Rehovot
-location = GeoLocation("Rehovot", LAT, LON, TZ_NAME, elevation=ELEVATION)
+def ScheduleAtJob(Cmd, ExecutionTime):
+  # Format the time for the 'at' command using POSIX time format: YYYYMMDDhhmm
+  TimeStr = ExecutionTime.strftime("%Y%m%d%H%M")
+  
+  try:
+    # Run 'at' with the -t flag specifying the exact time.
+    # We pipe the command we want to execute into its stdin.
+    Proc = subprocess.run(
+      ["/usr/bin/at", "-t", TimeStr],
+      input=Cmd,
+      text=True,
+      capture_output=True,
+      check=True
+    )
+    # 'at' writes its job info to stderr rather than stdout
+    print(f"Successfully scheduled job: {Proc.stderr.strip()}")
+  except subprocess.CalledProcessError as Err:
+    print(f"Failed to schedule job. Error: {Err.stderr.strip()}")
 
 def is_observance_day(check_date: date) -> bool:
     """Returns True if the date is a Friday or a Yom Tov that restricts work/requires candle lighting."""
@@ -101,38 +114,101 @@ def get_observance_block(target_date: datetime):
     
     return union_start, union_end
 
-def update_cron_jobs(start_time, end_time):
-    """Purges previous dynamic jobs and schedules existing target scripts."""
-    try:
-        cron = CronTab(user=True)
-    except Exception as e:
-        logger.error(f"Could not access user crontab: {e}")
-        sys.exit(1)
+def RemoveAllAtJobs(SearchString):
+  try:
+    # 1. Get the list of pending jobs
+    AtqProc = subprocess.run(
+      ["/usr/bin/atq"],
+      capture_output=True,
+      text=True,
+      check=True
+    )
     
-    # Remove previous dynamic entries
-    cron.remove_all(comment="shabbat-automation")
+    # Parse the job IDs from the beginning of each line in atq output
+    JobIds = []
+    for Line in AtqProc.stdout.strip().split("\n"):
+      if Line:
+        Match = re.match(r"^\s*(\d+)", Line)
+        if Match:
+          JobIds.append(Match.group(1))
+          
+    # 2. Inspect each job and remove if the SearchString matches
+    for JobId in JobIds:
+      CatProc = subprocess.run(
+        ["/usr/bin/at", "-c", JobId],
+        capture_output=True,
+        text=True,
+        check=True
+      )
+      
+      # Check if our comment or script name is inside the job content
+      if SearchString in CatProc.stdout:
+        subprocess.run(
+          ["/usr/bin/atrm", JobId],
+          check=True
+        )
+        print(f"Removed at job {JobId} containing '{SearchString}'.")
+        
+  except subprocess.CalledProcessError as Err:
+    print(f"Error managing at jobs: {Err.stderr.strip()}")
+
+def ScheduleAtJob(Cmd, ExecutionTime):
+  # Format the time for the 'at' command using POSIX time format: YYYYMMDDhhmm
+  TimeStr = ExecutionTime.strftime("%Y%m%d%H%M")
+  
+  try:
+    # Run 'at' with the -t flag specifying the exact time.
+    # We pipe the command we want to execute into its stdin.
+    Proc = subprocess.run(
+      ["/usr/bin/at", "-t", TimeStr],
+      input=Cmd,
+      text=True,
+      capture_output=True,
+      check=True
+    )
+    # 'at' writes its job info to stderr rather than stdout
+    print(f"Successfully scheduled job: {Proc.stderr.strip()}")
+  except subprocess.CalledProcessError as Err:
+    print(f"Failed to schedule job. Error: {Err.stderr.strip()}")
+
+def UpdateAtJobs(start_time, end_time):
+  """Purges previous dynamic jobs and schedules existing target scripts."""
+  # Remove previous dynamic entries
+  RemoveAllAtJobs("shabbat-automation")
+  
+  for item in SCRIPT_MAPPING:
+    script_path = os.path.join(SCRIPT_DIR, item["name"])
     
-    for item in SCRIPT_MAPPING:
-        script_path = os.path.join(SCRIPT_DIR, item["name"])
-        
-        if not os.path.exists(script_path):
-            logger.warning(f"Skipping schedule: '{item['name']}' not found in {SCRIPT_DIR}")
-            continue
-            
-        anchor_time = start_time if item["anchor"] == "start" else end_time
-        target_time = anchor_time + timedelta(hours=item["offset_hours"])
-        
-        cmd = f"/usr/bin/python3 {script_path}"
-        
-        job = cron.new(command=cmd, comment="shabbat-automation")
-        job.setall(target_time.minute, target_time.hour, target_time.day, target_time.month, "*")
-        
-        logger.info(f"Successfully scheduled {item['name']} for {target_time.strftime('%Y-%m-%d %H:%M')}")
-        
-    cron.write()
-    logger.info("Crontab rewrite completed successfully.")
+    if not os.path.exists(script_path):
+      logging.warning(f"Skipping schedule: '{item['name']}' not found in {SCRIPT_DIR}")
+      continue
+      
+    anchor_time = start_time if item["anchor"] == "start" else end_time
+    target_time = anchor_time + timedelta(hours=item["offset_hours"])
+    
+    # Append the comment directly to the command so our inspector finds it
+    cmd = f"/usr/bin/python3 {script_path}  # shabbat-automation"
+    
+    if ScheduleAtJob(cmd, target_time):
+      logging.info(f"Successfully scheduled {item['name']} for {target_time.strftime('%Y-%m-%d %H:%M')}")
+      
+  logging.info("At-job queue update completed successfully.")
+
 
 def main():
+    # --- LOGGING SETUP ---
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(levelname)s: %(name)s: %(message)s',
+        handlers=[
+            logging.FileHandler(LOG_FILE),
+            logging.StreamHandler(sys.stdout)
+        ]
+    )
+    logger = logging.getLogger("shabbat-prep")
+    logger.info('------------------')
+    logger.info(f'Running shabbat-prepare.py on {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}')
+    
     parser = argparse.ArgumentParser(description="Schedule Shabbat/Yom Tov child automation tasks via Crontab.")
     parser.add_argument(
         "--when", 
@@ -159,7 +235,7 @@ def main():
         logger.info(f"Observance sequence detected!")
         logger.info(f"Union Start (Candle Lighting): {start.strftime('%Y-%m-%d %H:%M:%S')}")
         logger.info(f"Union End (Tzais/Havdalah):   {end.strftime('%Y-%m-%d %H:%M:%S')}")
-        update_cron_jobs(start, end)
+        UpdateAtJobs(start, end)
     else:
         logger.info("No Shabbat or Yom Tov entry occurs tonight. Exiting cleanly.")
         sys.exit(0)
