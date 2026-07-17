@@ -5,7 +5,8 @@ import sys
 
 logger = open_log(sys.argv[0])
 
-url = 'http://192.168.1.11/shavua-tov.mp3'
+#url = 'http://192.168.1.11/shavua-tov.mp3'
+url = 'http://192.168.1.11/hamavdil-marokai.mp3'
 play_mp3(url=url,
-         volume=5)
+         volume=7)
 print('ok')
