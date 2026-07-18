@@ -38,6 +38,35 @@ SCRIPT_MAPPING = [
     {"name": "shabbat-post-1h.py", "anchor": "end",   "offset_hours": 1}
 ]
 
+class AtJobScheduler:
+  def __init__(self):
+    self.jobs = []
+
+  def AddAtJob(self, Cmd, ExecutionTime):
+    self.jobs.append((Cmd, ExecutionTime))
+
+  def WriteShellFile(self, filepath="/tmp/at-tasks.sh"):
+    logging.info(f"Writing {len(self.jobs)} at jobs to {filepath}")
+    with open(filepath, "w") as f:
+      for Cmd, ExecutionTime in self.jobs:
+        TimeStr = ExecutionTime.strftime("%H:%M")
+        DateStr = ExecutionTime.strftime("%d.%m.%Y")
+        f.write(f"echo {Cmd} | at -M {TimeStr} {DateStr}\n")
+    logging.info(f"Successfully wrote shell file: {filepath}")
+
+  def ExecuteShellFile(self, filepath="/tmp/at-tasks.sh"):
+    try:
+      logging.info(f"Executing shell file: {filepath}")
+      with open(filepath, "r") as f:
+        shell_script = f.read()
+      subprocess.run(
+        ["bash", "-c", shell_script],
+        check=True
+      )
+      logging.info("Successfully executed all at jobs")
+    except subprocess.CalledProcessError as Err:
+      logging.error(f"Failed to execute shell file {filepath}. Error: {Err}")
+
 def ScheduleAtJob(Cmd, ExecutionTime):
   # Format the time for the 'at' command using POSIX time format: YYYYMMDDhhmm
   TimeStr = ExecutionTime.strftime("%Y%m%d%H%M")
@@ -178,6 +207,8 @@ def UpdateAtJobs(start_time, end_time):
   # Remove previous dynamic entries
   RemoveAllAtJobs("shabbat-automation")
   
+  scheduler = AtJobScheduler()
+  
   for item in SCRIPT_MAPPING:
     script_path = os.path.join(SCRIPT_DIR, item["name"])
     
@@ -191,9 +222,10 @@ def UpdateAtJobs(start_time, end_time):
     # Append the comment directly to the command so our inspector finds it
     cmd = f"/home/dov/scripts/.venv/bin/python3 {script_path}"
     
-    if ScheduleAtJob(cmd, target_time):
-      logging.info(f"Successfully scheduled {item['name']} for {target_time.strftime('%Y-%m-%d %H:%M')}")
-      
+    scheduler.AddAtJob(cmd, target_time)
+    
+  scheduler.WriteShellFile()
+  scheduler.ExecuteShellFile()
   logging.info("At-job queue update completed successfully.")
 
 
