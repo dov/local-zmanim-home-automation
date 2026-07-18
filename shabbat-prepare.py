@@ -9,7 +9,6 @@ import sys
 import argparse
 import logging
 from datetime import datetime, timedelta, date
-from crontab import CronTab
 import subprocess
 import re
 
@@ -35,28 +34,29 @@ SCRIPT_MAPPING = [
     {"name": "shabbat-pre-1h.py",  "anchor": "start", "offset_hours": -1},
     {"name": "shabbat-pre-0.5h.py",  "anchor": "start", "offset_hours": -0.5},
     {"name": "shabbat-pre-0h.py",  "anchor": "start", "offset_hours": 0},
-    {"name": "shabbat-post-0h.py", "anchor": "end",   "offset_hours": 0.5},
+    {"name": "shabbat-post-0h.py", "anchor": "end",   "offset_hours": 0},
     {"name": "shabbat-post-1h.py", "anchor": "end",   "offset_hours": 1}
 ]
 
 def ScheduleAtJob(Cmd, ExecutionTime):
   # Format the time for the 'at' command using POSIX time format: YYYYMMDDhhmm
   TimeStr = ExecutionTime.strftime("%Y%m%d%H%M")
-  
+  if ExecutionTime < datetime.now():
+      logger.info(f'Skipping time in the post: {now}')
   try:
     # Run 'at' with the -t flag specifying the exact time.
     # We pipe the command we want to execute into its stdin.
     Proc = subprocess.run(
       ["/usr/bin/at", "-t", TimeStr],
-      input=Cmd,
+      input=Cmd.encode(errors='ignore'),
       text=True,
       capture_output=True,
       check=True
     )
     # 'at' writes its job info to stderr rather than stdout
-    print(f"Successfully scheduled job: {Proc.stderr.strip()}")
+    logger.info(f"Successfully scheduled job: {Proc.stderr.strip()}")
   except subprocess.CalledProcessError as Err:
-    print(f"Failed to schedule job. Error: {Err.stderr.strip()}")
+    logger.warnng(f"Failed to schedule job. Error: {Err.stderr.strip()}")
 
 def is_observance_day(check_date: date) -> bool:
     """Returns True if the date is a Friday or a Yom Tov that restricts work/requires candle lighting."""
@@ -110,7 +110,7 @@ def get_observance_block(target_date: datetime):
             
     # 3. Calculate Havdalah (tzais) on the night the block terminates
     # The exit Havdalah occurs on the evening of the first day that is NOT an observance day
-    cal_end = ZmanimCalendar(geo_location=location, date=current_inspect_date)
+    cal_end = ZmanimCalendar(geo_location=location, date=current_inspect_date - timedelta(days=1))
     union_end = cal_end.tzais()
     
     return union_start, union_end
@@ -135,21 +135,22 @@ def RemoveAllAtJobs(SearchString):
           
     # 2. Inspect each job and remove if the SearchString matches
     for JobId in JobIds:
-      CatProc = subprocess.run(
-        ["/usr/bin/at", "-c", JobId],
-        capture_output=True,
-        text=True,
-        check=True
-      )
+      #CatProc = subprocess.run(
+      #  ["/usr/bin/at", "-c", JobId],
+      #  capture_output=True,
+      #  text=True,
+      #  check=True
+      #)
       
       # Check if our comment or script name is inside the job content
-      if SearchString in CatProc.stdout:
-        subprocess.run(
-          ["/usr/bin/atrm", JobId],
-          check=True
-        )
-        print(f"Removed at job {JobId} containing '{SearchString}'.")
-        
+      #if SearchString in CatProc.stdout:
+      #  subprocess.run(
+      #    ["/usr/bin/atrm", JobId],
+      #    check=True
+      #  )
+      #  print(f"Removed at job {JobId} containing '{SearchString}'.")
+      pass
+
   except subprocess.CalledProcessError as Err:
     print(f"Error managing at jobs: {Err.stderr.strip()}")
 
