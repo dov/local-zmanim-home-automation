@@ -17,9 +17,6 @@ from telegram import Bot
 import asyncio
 from telegram.constants import ParseMode
 from telegram.ext import Application
-import asyncio
-from telegram.constants import ParseMode
-from telegram.ext import Application
 import json
 import pychromecast
 from crontab import CronTab
