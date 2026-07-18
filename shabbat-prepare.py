@@ -43,7 +43,8 @@ class AtJobScheduler:
         self.jobs = []
 
     def AddAtJob(self, Cmd, ExecutionTime):
-        if ExecutionTime < datetime.now():
+        now = datetime.now().astimezone()
+        if ExecutionTime < now:
             logging.info(f"Skipping past time: {ExecutionTime.strftime('%Y-%m-%d %H:%M')}")
             return
         self.jobs.append((Cmd, ExecutionTime))
