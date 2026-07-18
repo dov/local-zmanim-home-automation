@@ -43,9 +43,15 @@ class AtJobScheduler:
         self.jobs = []
 
     def AddAtJob(self, Cmd, ExecutionTime):
+        if ExecutionTime < datetime.now():
+            logging.info(f"Skipping past time: {ExecutionTime.strftime('%Y-%m-%d %H:%M')}")
+            return
         self.jobs.append((Cmd, ExecutionTime))
 
     def WriteShellFile(self, filepath="/tmp/at-tasks.sh"):
+        if not self.jobs:
+            logging.info("No jobs to write. Skipping shell file generation.")
+            return
         logging.info(f"Writing {len(self.jobs)} at jobs to {filepath}")
         with open(filepath, "w") as f:
             for Cmd, ExecutionTime in self.jobs:
@@ -55,6 +61,9 @@ class AtJobScheduler:
         logging.info(f"Successfully wrote shell file: {filepath}")
 
     def ExecuteShellFile(self, filepath="/tmp/at-tasks.sh"):
+        if not self.jobs:
+            logging.info("No jobs to execute. Skipping shell file execution.")
+            return
         try:
             logging.info(f"Executing shell file: {filepath}")
             with open(filepath, "r") as f:
