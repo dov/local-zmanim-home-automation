@@ -60,13 +60,14 @@ def check_is_up(hostname, timeout_in_ms = 500):
 
 
 def mqtt_query(mqtt_id='kumkum',
-               topic='power',
-               host='192.168.1.11',
-               port=1883,
-               user=None,
-               password=None,
-               timeout=1.0,
-               action=None):
+                topic='power',
+                host='192.168.1.11',
+                port=1883,
+                user=None,
+                password=None,
+                timeout=1.0,
+                action=None,
+                topic_prefix='stat'):
   """
   Queries or sets the status of a Tasmota MQTT device.
   
@@ -79,6 +80,7 @@ def mqtt_query(mqtt_id='kumkum',
     password (str): MQTT password (optional).
     timeout (float): Timeout in seconds waiting for the response.
     action (str): Explicit action to send: 'ON', 'OFF', or None to just query.
+    topic_prefix (str): The topic prefix (e.g., 'stat', 'tele', 'cmnd'). Default is 'stat'.
     
   Returns:
     str: The string payload response from the status topic (e.g., 'ON' or 'OFF').
@@ -87,20 +89,22 @@ def mqtt_query(mqtt_id='kumkum',
     ConnectionError: If the connection to the broker fails.
     TimeoutError: If the device doesn't respond within the timeout window.
   """
-  logger.info(
-    "MQTT query initiated: id=%s, topic=%s, host=%s, port=%d, user=%s, timeout=%.1fs, action=%s",
-    mqtt_id,
-    topic,
-    host,
-    port,
-    user,
-    timeout,
-    action
-  )
+  if logger:
+    logger.info(
+      "MQTT query initiated: id=%s, topic=%s, host=%s, port=%d, user=%s, timeout=%.1fs, action=%s, topic_prefix=%s",
+      mqtt_id,
+      topic,
+      host,
+      port,
+      user,
+      timeout,
+      action,
+      topic_prefix
+    )
 
   # Normalize topic formatting to match Tasmota standard uppercase structure
   topic_upper = topic.upper()
-  status_topic = f"stat/{mqtt_id}/{topic_upper}"
+  status_topic = f"{topic_prefix}/{mqtt_id}/{topic_upper}"
   cmnd_topic = f"cmnd/{mqtt_id}/{topic_upper}"
 
   result_payload = {}
@@ -141,7 +145,7 @@ def mqtt_query(mqtt_id='kumkum',
     raise ConnectionError(f"MQTT broker rejected connection with code status.")
 
   # If action is provided, forward it. Otherwise, send empty payload to query status.
-  payload = action if action in ('ON', 'OFF') else ''
+  payload = action if action in ('ON', 'OFF') or (action and action.isdigit()) else ''
   client.publish(cmnd_topic, payload=payload)
 
   if not got_result.wait(timeout=timeout):
@@ -154,6 +158,35 @@ def mqtt_query(mqtt_id='kumkum',
     raise ConnectionError("MQTT broker connection dropped during execution.")
 
   return result_payload.get('payload', '')
+
+
+def get_athmos_power_draw(num_measurements=1):
+  """
+  Queries the kumkum (ATHMOS) power switch for its current power draw.
+  Power draw is published to stat/kumkum/STATUS8 under ENERGY.Power field.
+  Returns average of num_measurements readings.
+  """
+  readings = []
+  for _ in range(num_measurements):
+    try:
+      power_status = mqtt_query(mqtt_id="kumkum", topic="POWER", timeout=3.0)
+      if power_status != "ON":
+        return 0.0
+
+      result = mqtt_query(mqtt_id="kumkum", topic="STATUS8", action="8", timeout=3.0)
+      if result:
+        data = json.loads(result)
+        power = data.get("StatusSNS", {}).get("ENERGY", {}).get("Power")
+        if power is not None:
+          readings.append(power)
+    except Exception as e:
+      print(f"Error querying kumkum power draw: {e}", file=sys.stderr)
+      continue
+
+  if not readings:
+    return None
+
+  return sum(readings) / len(readings)
 
 
 # Your actual Telegram Bot Token from @BotFather
@@ -194,7 +227,8 @@ def send_msg(msg):
   
 def play_mp3(url='http://192.168.1.11/shavua-tov.mp3',
             volume=5):
-  logger.info(f'play_mp3({url=},{volume=})')
+  if logger:
+    logger.info(f'play_mp3({url=},{volume=})')
   # Cleaned up: Removed the deprecated discovery functions. 
   # get_listed_chromecasts natively boots a background CastBrowser.
   chromecasts, browser = pychromecast.get_listed_chromecasts(friendly_names=["Family Room speaker"])
