@@ -38,6 +38,14 @@ SCRIPT_MAPPING = [
     {"name": "shabbat-post-1h.py", "anchor": "end",   "offset_hours": 1}
 ]
 
+# Scripts run at an internal boundary within a chained observance block,
+# i.e. where Shabbat ends directly into a Yom Tov (or vice versa) with no
+# gap in melacha restrictions in between. Keyed by (leaving, entering).
+TRANSITION_SCRIPT_MAPPING = {
+    ("shabbat", "yomtov"): "shabbat-transition-shabbat2yomtov.py",
+    ("yomtov", "shabbat"): "shabbat-transition-yomtov2shabbat.py",
+}
+
 class AtJobScheduler:
     def __init__(self):
         self.jobs = []
@@ -79,68 +87,112 @@ class AtJobScheduler:
 
 
 def is_observance_day(check_date: date) -> bool:
-    """Returns True if the date is a Friday or a Yom Tov that restricts work/requires candle lighting."""
+    """Returns True if candle lighting is required on the evening of check_date,
+    i.e. check_date is Erev Shabbat (Friday) or Erev Yom Tov."""
     if check_date.weekday() == 4:
         return True
-    
-    j_cal = JewishCalendar(datetime_date=check_date, in_israel=True)
-    
-    if j_cal.is_yom_tov_assur_bemelacha():
+
+    j_cal = JewishCalendar(check_date, in_israel=True)
+
+    if j_cal.is_erev_yom_tov():
         return True
-        
+
     return False
+
+
+def is_restricted_day(check_date: date) -> bool:
+    """Returns True if check_date itself is Shabbat or a melacha-restricted Yom Tov day
+    (i.e. the observance is still in force through that day)."""
+    if check_date.weekday() == 5:
+        return True
+
+    j_cal = JewishCalendar(check_date, in_israel=True)
+    return j_cal.is_yom_tov_assur_bemelacha()
+
+
+def classify_restricted_day(check_date: date) -> str:
+    """Labels a restricted day as 'shabbat', 'yomtov', or 'both' (e.g. Yom Tov falling on Shabbat)."""
+    is_shabbat = (check_date.weekday() == 5)
+    j_cal = JewishCalendar(check_date, in_israel=True)
+    is_yom_tov = j_cal.is_yom_tov_assur_bemelacha()
+
+    if is_shabbat and is_yom_tov:
+        return "both"
+    if is_shabbat:
+        return "shabbat"
+    return "yomtov"
 
 
 def get_observance_block(target_date: datetime):
     """
-    Scans a 3-day window using ZmanimCalendar. 
-    If an observance begins tonight, it chains adjacent holy days and returns (start_datetime, end_datetime).
+    If an observance (Shabbat and/or Yom Tov, per Israeli convention) begins tonight,
+    chains adjacent holy days into a single block and returns
+    (start_datetime, end_datetime, transitions).
+
+    transitions is a list of (transition_datetime, leaving_label, entering_label) tuples
+    marking internal boundaries where Shabbat ends directly into a Yom Tov, or vice versa,
+    with no gap in melacha restrictions in between.
     """
     start_date = target_date.date()
-    
+
     if not is_observance_day(start_date):
-        return None, None
+        return None, None, []
 
     cal_start = ZmanimCalendar(geo_location=location, date=start_date)
     union_start = cal_start.candle_lighting()
-    
+
+    restricted_days = []
     current_inspect_date = start_date + timedelta(days=1)
-    
-    while True:
-        is_shabbat = (current_inspect_date.weekday() == 5)
-        
-        j_cal = JewishCalendar(datetime_date=current_inspect_date, in_israel=True)
-        is_yom_tov = j_cal.is_yom_tov_assur_bemelacha()
-        
-        if is_shabbat or is_yom_tov:
-            current_inspect_date += timedelta(days=1)
-        else:
-            break
-            
-    cal_end = ZmanimCalendar(geo_location=location, date=current_inspect_date - timedelta(days=1))
+    while is_restricted_day(current_inspect_date):
+        restricted_days.append(current_inspect_date)
+        current_inspect_date += timedelta(days=1)
+
+    cal_end = ZmanimCalendar(geo_location=location, date=restricted_days[-1])
     union_end = cal_end.tzais()
-    
-    return union_start, union_end
+
+    transitions = []
+    for day, next_day in zip(restricted_days, restricted_days[1:]):
+        label = classify_restricted_day(day)
+        next_label = classify_restricted_day(next_day)
+        if "both" in (label, next_label) or label == next_label:
+            continue
+        cal_day = ZmanimCalendar(geo_location=location, date=day)
+        transitions.append((cal_day.tzais(), label, next_label))
+
+    return union_start, union_end, transitions
 
 
-def UpdateAtJobs(start_time, end_time):
+def UpdateAtJobs(start_time, end_time, transitions=()):
     """Purges previous dynamic jobs and schedules existing target scripts."""
     scheduler = AtJobScheduler()
-    
+
     for item in SCRIPT_MAPPING:
         script_path = os.path.join(SCRIPT_DIR, item["name"])
-        
+
         if not os.path.exists(script_path):
             logging.warning(f"Skipping schedule: '{item['name']}' not found in {SCRIPT_DIR}")
             continue
-            
+
         anchor_time = start_time if item["anchor"] == "start" else end_time
         target_time = anchor_time + timedelta(hours=item["offset_hours"])
-        
+
         cmd = f"/home/dov/scripts/.venv/bin/python3 {script_path}"
-        
+
         scheduler.AddAtJob(cmd, target_time)
-        
+
+    for trans_time, leaving_label, entering_label in transitions:
+        script_name = TRANSITION_SCRIPT_MAPPING.get((leaving_label, entering_label))
+        if not script_name:
+            continue
+
+        script_path = os.path.join(SCRIPT_DIR, script_name)
+        if not os.path.exists(script_path):
+            logging.warning(f"Skipping schedule: '{script_name}' not found in {SCRIPT_DIR}")
+            continue
+
+        cmd = f"/home/dov/scripts/.venv/bin/python3 {script_path}"
+        scheduler.AddAtJob(cmd, trans_time)
+
     scheduler.WriteShellFile()
     scheduler.ExecuteShellFile()
     logging.info("At-job queue update completed successfully.")
@@ -178,13 +230,15 @@ def main():
         eval_time = datetime.now()
         logger.info(f"Running daily cron sweep. System date: {eval_time.strftime('%Y-%m-%d')}")
 
-    start, end = get_observance_block(eval_time)
-    
+    start, end, transitions = get_observance_block(eval_time)
+
     if start and end:
         logger.info(f"Observance sequence detected!")
         logger.info(f"Union Start (Candle Lighting): {start.strftime('%Y-%m-%d %H:%M:%S')}")
         logger.info(f"Union End (Tzais/Havdalah):   {end.strftime('%Y-%m-%d %H:%M:%S')}")
-        UpdateAtJobs(start, end)
+        for trans_time, leaving_label, entering_label in transitions:
+            logger.info(f"Internal transition: {leaving_label} -> {entering_label} at {trans_time.strftime('%Y-%m-%d %H:%M:%S')}")
+        UpdateAtJobs(start, end, transitions)
     else:
         logger.info("No Shabbat or Yom Tov entry occurs tonight. Exiting cleanly.")
         sys.exit(0)

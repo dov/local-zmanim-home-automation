@@ -20,6 +20,27 @@ The Post-Scripts run relative to the exit Havdalah:
 1. shabbat-post-0h.py runs exactly at Tzais.
 2. shabbat-post-1h.py runs 1 hour after Tzais. 
 
+## 🕎 Chained blocks and internal transitions
+
+Shabbat and Yom Tov (per Israeli convention: 1-day Yom Tov, Rosh Hashana 2 days) are
+detected identically and chained together into a single block whenever they're
+adjacent with no gap in melacha restrictions — e.g. Shabbat followed directly by a
+Yom Tov, or a 2-day Yom Tov followed directly by Shabbat. The Pre-Scripts run once,
+relative to the start of the *whole* chained block, and the Post-Scripts run once,
+relative to the *end* of the whole chained block.
+
+Where the chain crosses an internal Shabbat↔Yom Tov boundary (e.g. Shabbat ends
+directly into a Yom Tov night), an extra transition script runs exactly at that
+internal Tzais — separately from `shabbat-post-0h.py`, which only fires at the
+true end of the whole chain:
+
+- `shabbat-transition-shabbat2yomtov.py` — Shabbat ends directly into a Yom Tov.
+- `shabbat-transition-yomtov2shabbat.py` — a Yom Tov ends directly into Shabbat.
+
+These are intentionally *not* the same as `shabbat-post-0h.py`: since the observance
+continues right on, they play a different (chag-entry) tune and do **not** turn off
+the kumkum.
+
 # Installation and Requirements
 
 Log into your Raspberry Pi and install the native system crontab engine bindings and local astronomical calculator:
@@ -40,7 +61,9 @@ $HOME
     ├── shabbat-pre-1h.py     # Runs 1 hour BEFORE Candle Lighting (Optional)
     ├── shabbat-pre-0h.py     # Runs EXACTLY AT Candle Lighting (Optional)
     ├── shabbat-post-0h.py    # Runs EXACTLY AT Tzais / Havdalah (Optional)
-    └── shabbat-post-1h.py    # Runs 1 hour AFTER Tzais / Havdalah (Optional)
+    ├── shabbat-post-1h.py    # Runs 1 hour AFTER Tzais / Havdalah (Optional)
+    ├── shabbat-transition-shabbat2yomtov.py  # Internal Tzais: Shabbat -> Yom Tov (Optional)
+    └── shabbat-transition-yomtov2shabbat.py  # Internal Tzais: Yom Tov -> Shabbat (Optional)
 ```
 * **Filesystem Safety Check**: The master coordinator automatically scans the directory on every execution. If a specific child script (e.g., `shabbat-pre-1h.py`) is missing, it will gracefully skip scheduling it without breaking the rest of your pipeline.
 
