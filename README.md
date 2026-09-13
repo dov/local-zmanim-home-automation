@@ -43,42 +43,46 @@ the kumkum.
 
 # Installation and Requirements
 
-Log into your Raspberry Pi and install the native system crontab engine bindings and local astronomical calculator:
-
-`pip install python-crontab zmanim`
-
-*(Note: Ensure you install python-crontab and not the conflicting standalone crontab packag.)*
+Log into your Raspberry Pi, clone this repo (e.g. into `~/git/local-zmanim-home-automation/`),
+and run `./deploy.sh` from inside it. It uses [`uv`](https://astral.sh) to build a local `.venv`
+right there in the checkout and installs all required packages (`python-crontab`, `zmanim`,
+`paho-mqtt`, `python-telegram-bot`, `pychromecast`) into it — see [Setting up the Daily
+Trigger](#️-setting-up-the-daily-trigger) below.
 
 ## 📂 Project Directory Structure
 
-The setup securely expands your local home environment dynamically. Place your execution scripts inside `~/scripts/`:
+The system runs directly out of this git checkout — there is no copy step. `SCRIPT_DIR` and the
+venv used to invoke child scripts are both derived from `shabbat-prepare.py`'s own location, so
+wherever you clone the repo (e.g. `~/git/local-zmanim-home-automation/`) is where it runs from:
 
 ```text
-$HOME
-├── log/shabbat-prepare.log       # Central log repository created automatically
-└── scripts/
-    ├── shabbat-prepare.py    # The master scheduling coordinator
-    ├── shabbat-pre-1h.py     # Runs 1 hour BEFORE Candle Lighting (Optional)
-    ├── shabbat-pre-0h.py     # Runs EXACTLY AT Candle Lighting (Optional)
-    ├── shabbat-post-0h.py    # Runs EXACTLY AT Tzais / Havdalah (Optional)
-    ├── shabbat-post-1h.py    # Runs 1 hour AFTER Tzais / Havdalah (Optional)
-    ├── shabbat-transition-shabbat2yomtov.py  # Internal Tzais: Shabbat -> Yom Tov (Optional)
-    └── shabbat-transition-yomtov2shabbat.py  # Internal Tzais: Yom Tov -> Shabbat (Optional)
+local-zmanim-home-automation/       # This git checkout
+├── .venv/                          # Local virtualenv created by deploy.sh
+├── shabbat-prepare.py              # The master scheduling coordinator
+├── shabbat-pre-1h.py                # Runs 1 hour BEFORE Candle Lighting (Optional)
+├── shabbat-pre-0h.py                # Runs EXACTLY AT Candle Lighting (Optional)
+├── shabbat-post-0h.py               # Runs EXACTLY AT Tzais / Havdalah (Optional)
+├── shabbat-post-1h.py               # Runs 1 hour AFTER Tzais / Havdalah (Optional)
+├── shabbat-transition-shabbat2yomtov.py  # Internal Tzais: Shabbat -> Yom Tov (Optional)
+└── shabbat-transition-yomtov2shabbat.py  # Internal Tzais: Yom Tov -> Shabbat (Optional)
+
+$HOME/log/shabbat-prepare.log       # Central log repository created automatically
 ```
 * **Filesystem Safety Check**: The master coordinator automatically scans the directory on every execution. If a specific child script (e.g., `shabbat-pre-1h.py`) is missing, it will gracefully skip scheduling it without breaking the rest of your pipeline.
 
 ## ⚙️ Setting up the Daily Trigger
 
-To let the coordinator analyze the calendar every morning, add it to your system crontab:
+Run `./deploy.sh` from inside the git checkout — it pulls the latest code, (re)builds `.venv` in
+place, and idempotently installs the daily crontab entry for you:
 
 ```bash
-crontab -e
+cd ~/git/local-zmanim-home-automation && ./deploy.sh
 ```
 
-Append the following line at the very bottom of the file:
+That injects a line equivalent to:
 
 ```text
-0 5 * * * /usr/bin/python3 /home/pi/scripts/shabbat-prepare.py >> /home/pi/scripts/shabbat.log 2>&1
+0 5 * * * cd /home/pi/git/local-zmanim-home-automation && uv run python3 shabbat-prepare.py >> shabbat.log 2>&1
 ```
 This forces the scheduler to run daily at **05:00 AM**, redirecting startup debugging events to a dedicated script log.
 

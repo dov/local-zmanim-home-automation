@@ -23,7 +23,11 @@ LON = 34.808122
 ELEVATION = 49
 TZ_NAME = "Asia/Jerusalem"
 
-SCRIPT_DIR = os.path.expanduser("~/scripts")
+# Run directly out of the git checkout: SCRIPT_DIR and the venv used to run
+# child scripts are derived from this file's own location, not hardcoded,
+# so the same code works wherever the repo happens to be cloned.
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+VENV_PYTHON = os.path.join(SCRIPT_DIR, ".venv", "bin", "python3")
 LOG_FILE = os.path.expanduser("~/log/shabbat-prepare.log")
 
 # Initialize Geolocation for Rehovot
@@ -176,7 +180,7 @@ def UpdateAtJobs(start_time, end_time, transitions=()):
         anchor_time = start_time if item["anchor"] == "start" else end_time
         target_time = anchor_time + timedelta(hours=item["offset_hours"])
 
-        cmd = f"/home/dov/scripts/.venv/bin/python3 {script_path}"
+        cmd = f"{VENV_PYTHON} {script_path}"
 
         scheduler.AddAtJob(cmd, target_time)
 
@@ -190,7 +194,7 @@ def UpdateAtJobs(start_time, end_time, transitions=()):
             logging.warning(f"Skipping schedule: '{script_name}' not found in {SCRIPT_DIR}")
             continue
 
-        cmd = f"/home/dov/scripts/.venv/bin/python3 {script_path}"
+        cmd = f"{VENV_PYTHON} {script_path}"
         scheduler.AddAtJob(cmd, trans_time)
 
     scheduler.WriteShellFile()
