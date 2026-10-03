@@ -22,8 +22,8 @@ except TimeoutError:
   reason = 'Timeout error'
 
 if reason:
-  send_msg(f'shabbat-pre-1h: {reason}')
   play_mp3(f'http://192.168.1.11/{audio_fail}')
+  send_msg(f'shabbat-pre-1h: {reason}')
 else:
   power_draw = get_athmos_power_draw(num_measurements=5)
   print(f'{power_draw=}')

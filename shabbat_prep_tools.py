@@ -217,13 +217,28 @@ async def send_telegram_message(message='', parse_mode='HTML', chat_id=bot_token
     # Always clean up and close network connections safely
     await app.shutdown()
 
-def send_msg(msg):
-  # asyncio.run handles execution of the top-level async coroutine
-  asyncio.run(send_telegram_message(
-    message=msg,
-    parse_mode=ParseMode.HTML,
-    chat_id=me_user_id
-  ))
+def send_msg(msg, attempts=3, backoff=5):
+  """
+  Send a Telegram message, retrying on failure (the first connection after
+  idle sometimes times out). Never raises; returns True on success.
+  """
+  for attempt in range(1, attempts+1):
+    try:
+      # asyncio.run handles execution of the top-level async coroutine
+      asyncio.run(send_telegram_message(
+        message=msg,
+        parse_mode=ParseMode.HTML,
+        chat_id=me_user_id
+      ))
+      return True
+    except Exception as e:
+      if logger:
+        logger.warning(f'send_msg attempt {attempt}/{attempts} failed: {type(e).__name__}: {e}')
+      if attempt < attempts:
+        time.sleep(backoff*attempt)
+  if logger:
+    logger.error(f'send_msg giving up on {msg=}')
+  return False
   
 def play_mp3(url='http://192.168.1.11/shavua-tov.mp3',
             volume=5):
@@ -282,6 +297,11 @@ def open_log(script_name):
     ]
   )
   logger = logging.getLogger("shabbat-prep")
+
+  # Log uncaught exceptions; at jobs run with -M so stderr is otherwise lost
+  def log_uncaught(exc_type, exc_value, exc_tb):
+    logger.critical('Uncaught exception', exc_info=(exc_type, exc_value, exc_tb))
+  sys.excepthook = log_uncaught
   logger.info('------------------')
   logger.info(f'Running {script_name} on {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}')
   return logger
