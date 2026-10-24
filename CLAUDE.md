@@ -14,12 +14,17 @@ This is a standalone, zero-network-dependency Python system for Raspberry Pi tha
 4. **Child Scripts**: Optional execution scripts that run at specific times relative to the observance:
    - `shabbat-pre-1h.py`: 1 hour before Candle Lighting
    - `shabbat-pre-0.5h.py`: 30 minutes before Candle Lighting
+   - `shabbat-ensure-plan.py`: 30 minutes before Candle Lighting; installs the default device plan (`shabbat_default_plan.py`) unless a manual plan (`~/scripts/build_shab_at`) is already in the `at` queue
    - `shabbat-pre-0h.py`: Exactly at Candle Lighting
    - `shabbat-post-0h.py`: Exactly at Tzais/Havdalah (end of the whole chained block)
    - `shabbat-post-1h.py`: 1 hour after Tzais/Havdalah
    - `shabbat-transition-shabbat2yomtov.py`: Internal Tzais where Shabbat ends directly into a Yom Tov (chag-entry tune, kumkum left on)
    - `shabbat-transition-yomtov2shabbat.py`: Internal Tzais where a Yom Tov ends directly into Shabbat (chag-entry tune, kumkum left on)
 5. **Holiday chaining (Israeli convention)**: Shabbat and Yom Tov are detected via the same restricted-day logic and chained into one block whenever adjacent (e.g. Shabbat immediately followed by a Yom Tov). `get_observance_block()` in `shabbat-prepare.py` returns the overall start/end plus a list of internal Shabbat↔YomTov transitions within the chain; only those internal boundaries trigger the `shabbat-transition-*.py` scripts, not `shabbat-post-0h.py`.
+
+## Default device plan (fallback for `build_shab_at`)
+
+`shabbat-ensure-plan.py` looks in `atq` (via `at -c`) for jobs that run the device scripts listed in `MANUAL_PLAN_MARKERS` inside the observance window. If found, a manual plan exists and nothing is done. Otherwise `shabbat_default_plan.py` builds the plan from the zmanim of the block (candle lighting, chatzot, tzais), so it follows the season; seasons (e.g. `BEDROOM_AC_SEASON`) and all offsets are variables at the top of that file. Installed jobs carry a `# shabbat-default-plan` first line; `shabbat-ensure-plan.py --remove` removes them (needed if `build_shab_at` is run after the fallback). `--when YYYY-MM-DD --dry-run` prints the plan for any erev day. `build_shab_at` itself is deliberately untouched.
 
 ## Key Components
 

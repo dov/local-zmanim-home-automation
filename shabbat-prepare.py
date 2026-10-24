@@ -37,6 +37,8 @@ location = GeoLocation("Rehovot", LAT, LON, TZ_NAME, elevation=ELEVATION)
 SCRIPT_MAPPING = [
     {"name": "shabbat-pre-1h.py",  "anchor": "start", "offset_hours": -1},
     {"name": "shabbat-pre-0.5h.py",  "anchor": "start", "offset_hours": -0.5},
+    # Installs the default device plan unless one was scheduled by hand
+    {"name": "shabbat-ensure-plan.py",  "anchor": "start", "offset_hours": -0.5},
     {"name": "shabbat-pre-0h.py",  "anchor": "start", "offset_hours": 0},
     {"name": "shabbat-post-0h.py", "anchor": "end",   "offset_hours": 0},
     {"name": "shabbat-post-1h.py", "anchor": "end",   "offset_hours": 1}
