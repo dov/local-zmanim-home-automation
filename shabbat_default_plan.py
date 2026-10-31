@@ -72,8 +72,8 @@ BEDROOM_AC_NAP_END_BEFORE_TZAIS = H(0, 20)  # never run into the exit
 PLATA_STEP = H(0, 15)
 PLATA_START = H(0, 3)                   # relative to entry
 PLATA_DINNER_LENGTH = H(3, 30)
-PLATA_LUNCH_START = -H(1, 30)           # relative to chatzot
-PLATA_LUNCH_END = H(1, 30)
+PLATA_LUNCH_START = time(11, 0)         # clock time
+PLATA_LUNCH_END = time(14, 0)           # clock time
 PLATA_SEUDA3_START = -H(1, 52)          # relative to tzais of that day
 PLATA_SEUDA3_END = -H(0, 22)
 PLATA_CHAMIN_END = H(2, 30)             # relative to chatzot
@@ -294,8 +294,9 @@ def build_plan(block, now):
       p.pulses('plata', entry + PLATA_START,
                entry + PLATA_START + PLATA_DINNER_LENGTH,
                PLATA_STEP, 3, 'plata dinner')
-      p.pulses('plata', day.chatzot + PLATA_LUNCH_START,
-               day.chatzot + PLATA_LUNCH_END, PLATA_STEP, 3, 'plata lunch')
+      p.pulses('plata', _clock(day.date, PLATA_LUNCH_START, tz),
+               _clock(day.date, PLATA_LUNCH_END, tz), PLATA_STEP, 3,
+               'plata lunch')
 #      if day.kind in ('shabbat', 'both'):
 #        p.pulses('plata', day.tzais + PLATA_SEUDA3_START,
 #                 day.tzais + PLATA_SEUDA3_END, PLATA_STEP, 3, 'plata seuda 3')
